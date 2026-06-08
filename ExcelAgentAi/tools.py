@@ -2,8 +2,8 @@ import os
 import pandas as pd
 from typing import Any
 from langchain_core.tools import tool
-
-#TODO: Add notifications at the end of tools, so we can appeal to them 
+import openpyxl
+ 
 
 
 # Transformation dictionary and functions
@@ -133,3 +133,62 @@ def list_source_columns(file_path: str, header_row: int = 0) -> list[str]:
         return df.columns.str.strip().tolist()
     except Exception as e:
         return [f"Error: {e}"]
+
+# Tool to apply any formulas, model will take from RAG
+
+@tool
+def apply_formula(file_path: str, output_path: str, sheet_name: str, target_column: str, formula_template: str, header_row: int = 0) -> str:
+    """
+    Applies an Excel formula to an entire column by computing values directly in Python.
+    Use {row} as row number placeholder OR use column names like {Imię}, {Nazwisko} directly.
+    
+    Examples:
+        formula_template='{Imię} {Nazwisko}'         → concatenates two columns with space
+        formula_template='=IF({Wiek}>18, "TAK", "NIE")'  → conditional
+    """
+
+    xl = pd.ExcelFile(file_path)
+    if sheet_name not in xl.sheet_names:
+        sheet_name = xl.sheet_names[0]
+        print(f"DEBUG apply_formula: sheet not found, using '{sheet_name}'")
+
+    try:
+        
+        df = pd.read_excel(file_path, sheet_name=sheet_name, header=header_row)
+
+        # Build formula using column values directly
+        def compute_row(row):
+            result = formula_template
+            
+            # Strip leading = if present
+            if result.startswith("="):
+                result = result[1:]
+            
+            for col in df.columns:
+                placeholder = "{" + str(col) + "}"
+                if placeholder in result:
+                    result = result.replace(placeholder, str(row[col]) if pd.notna(row[col]) else "")
+            
+            # Handle & operator (Excel concatenation)
+            if " & " in result:
+                parts = [p.strip().strip('"') for p in result.split(" & ")]
+                result = "".join(parts)
+            
+            return result
+
+        df[target_column] = df.apply(compute_row, axis=1)
+
+        # Save back to Excel
+        with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+        import shutil
+        if output_path != file_path:
+            shutil.copy(output_path, file_path)
+
+        print(f"Formula applied to column '{target_column}' with '{formula_template}'")
+        return f"OK: Formula applied to column '{target_column}' in sheet '{sheet_name}', saved as '{output_path}'"
+
+    except Exception as e:
+        print(f"Formula NOT! EROR!: applied to column '{target_column}' with '{formula_template}' with error {str(e)}")
+        return f"Error: {str(e)}"

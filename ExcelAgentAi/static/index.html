@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel AI Agent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:        #0a0d12;
+            --surface:   #111520;
+            --panel:     #161b27;
+            --border:    #1f2a3d;
+            --border-hi: #2d3f5e;
+            --accent:    #00e5a0;
+            --accent-dim:#00b37c;
+            --accent-glow: rgba(0,229,160,0.18);
+            --warn:      #f59e0b;
+            --danger:    #ef4444;
+            --text:      #d4dce8;
+            --text-muted:#5a6a82;
+            --text-hi:   #ffffff;
+            --font-main: 'Syne', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ─── HEADER ─── */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            height: 56px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .header-brand .logo {
+            width: 30px; height: 30px;
+            background: var(--accent);
+            border-radius: 6px;
+            display: grid;
+            place-items: center;
+            font-size: 15px;
+        }
+        .header-brand h1 {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: var(--text-hi);
+        }
+        .header-badge {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: var(--text-muted);
+            background: var(--panel);
+            border: 1px solid var(--border);
+            padding: 3px 10px;
+            border-radius: 20px;
+        }
+
+        /* ─── LAYOUT ─── */
+        .layout {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* ─── LEFT PANEL ─── */
+        .left-panel {
+            width: 320px;
+            flex-shrink: 0;
+            background: var(--panel);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            gap: 20px;
+        }
+        .panel-section h2 {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+        .drop-zone {
+            border: 1.5px dashed var(--border-hi);
+            border-radius: 10px;
+            padding: 28px 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all .2s;
+            background: var(--surface);
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--accent);
+            background: rgba(0,229,160,0.04);
+        }
+        .drop-zone.uploaded {
+            border-color: var(--accent);
+            border-style: solid;
+            background: rgba(0,229,160,0.05);
+        }
+        .drop-zone .dz-icon { font-size: 28px; margin-bottom: 8px; display: block; }
+        .drop-zone .dz-text {
+            font-size: 12px;
+            color: var(--text);
+            font-weight: 600;
+        }
+        .drop-zone .dz-sub {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 4px;
+            font-family: var(--font-mono);
+        }
+
+        .file-info {
+            display: none;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            gap: 8px;
+            flex-direction: column;
+        }
+        .file-info.visible { display: flex; }
+        .file-info .fi-label {
+            font-size: 9px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--accent);
+            font-weight: 700;
+        }
+        .file-info code {
+            font-family: var(--font-mono);
+            font-size: 9px;
+            color: var(--warn);
+            background: var(--bg);
+            padding: 4px 6px;
+            border-radius: 4px;
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .left-spacer { flex: 1; }
+
+        /* ─── AGENT STATE INDICATOR ─── */
+        .agent-state {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+        }
+        .state-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            flex-shrink: 0;
+            transition: background .3s;
+        }
+        .state-dot.idle    { background: var(--text-muted); }
+        .state-dot.working { background: var(--warn); animation: pulse 1s infinite; }
+        .state-dot.waiting { background: var(--accent); animation: pulse 1.4s infinite; }
+        .state-dot.done    { background: var(--accent); }
+        @keyframes pulse {
+            0%,100% { opacity: 1; } 50% { opacity: .3; }
+        }
+        .state-label { color: var(--text-muted); font-family: var(--font-mono); }
+
+        /* ─── DOWNLOAD BTN ─── */
+        .download-btn {
+            width: 100%;
+            padding: 11px;
+            border-radius: 8px;
+            border: none;
+            background: var(--border);
+            color: var(--text-muted);
+            font-family: var(--font-main);
+            font-size: 12px;
+            font-weight: 700;
+            cursor: not-allowed;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            letter-spacing: 0.04em;
+            transition: all .2s;
+        }
+        .download-btn.active {
+            background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+            color: #000;
+            cursor: pointer;
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+        .download-btn.active:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 28px var(--accent-glow);
+        }
+
+        /* ─── RIGHT: CHAT AREA ─── */
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg);
+            overflow: hidden;
+        }
+
+        #chat-box {
+            flex: 1;
+            padding: 28px 32px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
+        }
+
+        /* ─── MESSAGE BUBBLES ─── */
+        .msg {
+            display: flex;
+            gap: 12px;
+            max-width: 680px;
+            animation: fadeUp .25s ease both;
+        }
+        .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .msg-avatar {
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            font-size: 14px;
+            flex-shrink: 0;
+            background: var(--panel);
+            border: 1px solid var(--border);
+        }
+        .msg.bot .msg-avatar  { background: rgba(0,229,160,0.12); border-color: var(--accent-dim); }
+        .msg.user .msg-avatar { background: rgba(59,130,246,0.15); border-color: #3b82f6; }
+        .msg-body {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 13px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .msg.user .msg-body {
+            background: rgba(59,130,246,0.1);
+            border-color: rgba(59,130,246,0.3);
+        }
+        .msg-body.loading { color: var(--text-muted); font-style: italic; }
+
+        /* ─── INTERRUPT PANEL ─── */
+        /*
+         * Ten panel pojawia się gdy backend zwróci { status: "interrupted", ... }
+         * Zawiera pytanie agenta + przyciski Yes/No + (opcjonalnie) pole tekstowe
+         */
+        #interrupt-panel {
+            display: none;
+            margin: 0 32px 16px;
+            background: var(--panel);
+            border: 1px solid var(--accent-dim);
+            border-radius: 12px;
+            padding: 16px 20px;
+            gap: 14px;
+            flex-direction: column;
+            animation: fadeUp .25s ease both;
+            box-shadow: 0 0 24px var(--accent-glow);
+        }
+        #interrupt-panel.visible { display: flex; }
+        .interrupt-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--accent);
+        }
+        .interrupt-question {
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--text-hi);
+        }
+        .interrupt-btns {
+            display: flex;
+            gap: 10px;
+        }
+        .interrupt-btn {
+            flex: 1;
+            padding: 9px;
+            border-radius: 7px;
+            border: none;
+            font-family: var(--font-main);
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 0.04em;
+            transition: all .15s;
+        }
+        .interrupt-btn.yes {
+            background: var(--accent);
+            color: #000;
+        }
+        .interrupt-btn.yes:hover { background: #00ffb3; }
+        .interrupt-btn.no {
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border-hi);
+        }
+        .interrupt-btn.no:hover { border-color: var(--accent-dim); color: var(--accent); }
+
+        /* Pole do wpisania kolejnej instrukcji (pokazuje się po kliknięciu "No") */
+        #continue-input-wrap {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+        }
+        #continue-input-wrap.visible { display: flex; }
+        #continue-input-wrap textarea {
+            background: var(--surface);
+            border: 1px solid var(--border-hi);
+            border-radius: 8px;
+            padding: 10px 12px;
+            color: var(--text-hi);
+            font-family: var(--font-main);
+            font-size: 13px;
+            resize: none;
+            rows: 3;
+            min-height: 72px;
+            outline: none;
+            transition: border-color .2s;
+        }
+        #continue-input-wrap textarea:focus { border-color: var(--accent); }
+        .send-continue-btn {
+            align-self: flex-end;
+            padding: 8px 20px;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: 7px;
+            font-family: var(--font-main);
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 0.04em;
+            transition: all .15s;
+        }
+        .send-continue-btn:hover { background: #00ffb3; }
+
+        /* ─── CHAT INPUT ─── */
+        .chat-input-area {
+            padding: 16px 32px;
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        #chat-input {
+            flex: 1;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 11px 16px;
+            color: var(--text-hi);
+            font-family: var(--font-main);
+            font-size: 13px;
+            outline: none;
+            transition: border-color .2s;
+        }
+        #chat-input:focus { border-color: var(--accent-dim); }
+        #chat-input::placeholder { color: var(--text-muted); }
+        #chat-input:disabled { opacity: .4; cursor: not-allowed; }
+        #send-btn {
+            padding: 11px 22px;
+            background: var(--border);
+            color: var(--text-muted);
+            border: none;
+            border-radius: 8px;
+            font-family: var(--font-main);
+            font-size: 12px;
+            font-weight: 700;
+            cursor: not-allowed;
+            letter-spacing: 0.04em;
+            transition: all .2s;
+        }
+        #send-btn.active {
+            background: var(--accent);
+            color: #000;
+            cursor: pointer;
+        }
+        #send-btn.active:hover { background: #00ffb3; }
+
+        /* ─── SCROLLBAR ─── */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-brand">
+        <div class="logo">📊</div>
+        <h1>Excel AI Agent</h1>
+    </div>
+    <span class="header-badge">LOCAL · QWEN3 14B</span>
+</header>
+
+<div class="layout">
+
+    <!-- ─── LEFT PANEL ─── -->
+    <div class="left-panel">
+
+        <div class="panel-section">
+            <h2>01 / Upload</h2>
+            <div id="drop-zone" class="drop-zone">
+                <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none">
+                <span class="dz-icon">📁</span>
+                <p class="dz-text" id="upload-status">Click or drag & drop</p>
+                <p class="dz-sub">.xlsx / .xls only</p>
+            </div>
+        </div>
+
+        <div class="file-info" id="file-info-box">
+            <span class="fi-label">✓ File ready</span>
+            <div>
+                <span style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;">Input</span>
+                <code id="path-in"></code>
+            </div>
+            <div>
+                <span style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;">Output</span>
+                <code id="path-out"></code>
+            </div>
+        </div>
+
+        <div class="left-spacer"></div>
+
+        <!-- Stan agenta -->
+        <div class="agent-state" id="agent-state-box">
+            <div class="state-dot idle" id="state-dot"></div>
+            <span class="state-label" id="state-label">idle</span>
+        </div>
+
+        <!-- Pobieranie -->
+        <button class="download-btn" id="download-btn" disabled>
+            <span>↓</span> Download result
+        </button>
+
+    </div>
+
+    <!-- ─── CHAT ─── -->
+    <div class="chat-area">
+
+        <div id="chat-box">
+            <div class="msg bot">
+                <div class="msg-avatar">🤖</div>
+                <div class="msg-body">
+                    Hi! I'm your local Excel AI Agent running on Qwen3 14B.<br>
+                    Upload a file on the left, then tell me what you'd like to do with it.
+                </div>
+            </div>
+        </div>
+
+        <!--
+            INTERRUPT PANEL
+            ════════════════════════════════════════════════════════
+            Pojawia się gdy backend zwróci:
+            {
+              "status": "interrupted",
+              "thread_id": "...",
+              "question": "Are you satisfied with the results?",
+              "output_file_path": "..."   ← opcjonalnie, żeby odblokować Download
+            }
+
+            Po kliknięciu "Yes"  → POST /resume  { thread_id, answer: "yes" }
+            Po kliknięciu "No"   → pokazuje textarea
+            Po wysłaniu textarea → POST /resume  { thread_id, answer: "no", new_instruction: "..." }
+
+            Gdy backend zwróci { "status": "done", "response": "..." }
+            → schowaj panel, pokaż finalną wiadomość, odblokuj Download
+        -->
+        <div id="interrupt-panel">
+            <div class="interrupt-header">
+                <span>⚡</span> Agent is waiting for your decision
+            </div>
+            <p class="interrupt-question" id="interrupt-question">
+                Are you satisfied with the results?
+            </p>
+            <div class="interrupt-btns">
+                <button class="interrupt-btn yes" id="btn-yes">✓ Yes, I'm done</button>
+                <button class="interrupt-btn no"  id="btn-no">↩ No, continue</button>
+            </div>
+            <div id="continue-input-wrap">
+                <textarea id="continue-textarea" placeholder="What else would you like to change or improve?"></textarea>
+                <button class="send-continue-btn" id="send-continue-btn">Send instruction →</button>
+            </div>
+        </div>
+
+        <div class="chat-input-area">
+            <input type="text" id="chat-input"
+                placeholder="Upload a file first, then give me instructions…"
+                disabled>
+            <button id="send-btn" disabled>Send</button>
+        </div>
+
+    </div>
+</div>
+
+<script>
+/*
+ * ════════════════════════════════════════════════════════════════
+ *  BACKEND CONTRACT (co musi zwracać Twoje FastAPI)
+ * ════════════════════════════════════════════════════════════════
+ *
+ *  POST /upload-excel   (multipart)
+ *    → { input_file_path: str, output_file_path: str }
+ *
+ *  POST /chat
+ *    body: { message: str, input_file_path: str, output_file_path: str, thread_id: str }
+ *    → ALBO:
+ *      { status: "interrupted", thread_id: str, question: str, output_file_path?: str }
+ *    → ALBO:
+ *      { status: "done", response: str, output_file_path?: str }
+ *
+ *  POST /resume
+ *    body: { thread_id: str, answer: "yes"|"no", new_instruction?: str }
+ *    → ALBO:
+ *      { status: "interrupted", thread_id: str, question: str }
+ *    → ALBO:
+ *      { status: "done", response: str, output_file_path?: str }
+ *
+ *  GET /download/{filename}
+ *    → file download
+ *
+ * ════════════════════════════════════════════════════════════════
+ *  MINIMAL FastAPI SNIPPET
+ * ════════════════════════════════════════════════════════════════
+ *
+ *  from langgraph.types import Command
+ *  from langgraph.checkpoint.memory import MemorySaver
+ *
+ *  memory = MemorySaver()
+ *  compiled_graph = excelGraph.compile(checkpointer=memory, interrupt_after=["do_we_end"])
+ *  #                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ *  #  interrupt_after=["do_we_end"] sprawia że graph zatrzymuje się
+ *  #  po węźle do_we_end i czeka na .update_state() + kolejny .invoke()
+ *
+ *  @app.post("/chat")
+ *  async def chat(req: ChatRequest):
+ *      thread_id = req.thread_id or str(uuid.uuid4())
+ *      config = {"configurable": {"thread_id": thread_id}}
+ *
+ *      # Uruchom / wznów graph
+ *      result = compiled_graph.invoke(
+ *          {"user_input": req.message, "source_path": req.input_file_path, ...},
+ *          config
+ *      )
+ *
+ *      # Sprawdź czy graph się zatrzymał na interrupt
+ *      snapshot = compiled_graph.get_state(config)
+ *      if snapshot.next:   # jest następny węzeł = graph czeka
+ *          return {
+ *              "status": "interrupted",
+ *              "thread_id": thread_id,
+ *              "question": "Are you satisfied with the results? (yes/no)",
+ *              "output_file_path": result.get("output_path")
+ *          }
+ *      return {"status": "done", "response": result["messages"][-1].content}
+ *
+ *  @app.post("/resume")
+ *  async def resume(req: ResumeRequest):
+ *      config = {"configurable": {"thread_id": req.thread_id}}
+ *
+ *      # Wstrzyknij odpowiedź użytkownika do stanu
+ *      compiled_graph.update_state(config, {"do_end": req.answer, "user_input": req.new_instruction or ""})
+ *
+ *      result = compiled_graph.invoke(None, config)
+ *
+ *      snapshot = compiled_graph.get_state(config)
+ *      if snapshot.next:
+ *          return {"status": "interrupted", "thread_id": req.thread_id,
+ *                  "question": "Any more changes?"}
+ *      return {"status": "done", "response": result["messages"][-1].content,
+ *              "output_file_path": result.get("output_path")}
+ */
+
+const API_URL = "";
+
+// ─── State ───────────────────────────────────────
+let currentInputPath  = null;
+let currentOutputPath = null;
+let currentThreadId   = null;   // ← kluczowe: identyfikator sesji grafu z checkpointerem
+
+// ─── DOM refs ────────────────────────────────────
+const dropZone      = document.getElementById('drop-zone');
+const fileInput     = document.getElementById('file-input');
+const uploadStatus  = document.getElementById('upload-status');
+const fileInfoBox   = document.getElementById('file-info-box');
+const pathIn        = document.getElementById('path-in');
+const pathOut       = document.getElementById('path-out');
+const chatBox       = document.getElementById('chat-box');
+const chatInput     = document.getElementById('chat-input');
+const sendBtn       = document.getElementById('send-btn');
+const downloadBtn   = document.getElementById('download-btn');
+const stateDot      = document.getElementById('state-dot');
+const stateLabel    = document.getElementById('state-label');
+
+const interruptPanel    = document.getElementById('interrupt-panel');
+const interruptQuestion = document.getElementById('interrupt-question');
+const btnYes            = document.getElementById('btn-yes');
+const btnNo             = document.getElementById('btn-no');
+const continueWrap      = document.getElementById('continue-input-wrap');
+const continueTextarea  = document.getElementById('continue-textarea');
+const sendContinueBtn   = document.getElementById('send-continue-btn');
+
+// ─── Agent state helper ───────────────────────────
+function setAgentState(state) {
+    // state: 'idle' | 'working' | 'waiting' | 'done'
+    stateDot.className = `state-dot ${state}`;
+    const labels = { idle: 'idle', working: 'processing…', waiting: 'waiting for you', done: 'done' };
+    stateLabel.textContent = labels[state] || state;
+}
+
+// ─── File Upload ──────────────────────────────────
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+    if (e.target.files[0]) handleFileUpload(e.target.files[0]);
+});
+
+async function handleFileUpload(file) {
+    uploadStatus.textContent = 'Uploading…';
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+        const res  = await fetch(`${API_URL}/upload-excel`, { method: 'POST', body: fd });
+        if (!res.ok) throw new Error('Upload failed');
+        const data = await res.json();
+
+        currentInputPath  = data.input_file_path;
+        currentOutputPath = data.output_file_path;
+
+        pathIn.textContent  = currentInputPath;
+        pathOut.textContent = currentOutputPath;
+        fileInfoBox.classList.add('visible');
+        dropZone.classList.add('uploaded');
+        uploadStatus.textContent = file.name;
+
+        // Odblokuj czat
+        chatInput.disabled = false;
+        chatInput.placeholder = 'Tell the agent what to do with your file…';
+        sendBtn.classList.add('active');
+        sendBtn.disabled = false;
+
+        appendMsg('bot', `File **${file.name}** uploaded successfully!\nTell me what transformations you'd like to apply.`);
+        setAgentState('idle');
+    } catch (err) {
+        uploadStatus.textContent = 'Upload error!';
+        appendMsg('bot', `❌ Upload error: ${err.message}`);
+    }
+}
+
+// ─── Send initial message ────────────────────────
+document.querySelector('.chat-input-area').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+sendBtn.addEventListener('click', sendMessage);
+
+async function sendMessage() {
+    const text = chatInput.value.trim();
+    if (!text || chatInput.disabled) return;
+
+    appendMsg('user', text);
+    chatInput.value = '';
+    lockInput();
+    setAgentState('working');
+    const loadingId = appendMsg('bot', '⏳ Working on it…', true);
+
+    try {
+        const res = await fetch(`${API_URL}/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message:          text,
+                input_file_path:  currentInputPath,
+                output_file_path: currentOutputPath,
+                thread_id:        currentThreadId     // null przy pierwszym wywołaniu
+            })
+        });
+        if (!res.ok) throw new Error('Server error');
+        const data = await res.json();
+
+        document.getElementById(loadingId)?.remove();
+        handleAgentResponse(data);
+
+    } catch (err) {
+        document.getElementById(loadingId)?.remove();
+        appendMsg('bot', `❌ Error: ${err.message}`);
+        unlockInput();
+        setAgentState('idle');
+    }
+}
+
+// ─── Handle agent response ───────────────────────
+function handleAgentResponse(data) {
+    if (data.status === 'interrupted') {
+        // Graph zatrzymał się na interrupt() — pokaż panel decyzji
+        currentThreadId = data.thread_id;
+        if (data.output_file_path) {
+            currentOutputPath = data.output_file_path;
+            pathOut.textContent = currentOutputPath;
+            enableDownload();
+        }
+        if (data.response) appendMsg('bot', data.response);
+        showInterruptPanel(data.question || 'Are you satisfied with the results?');
+        setAgentState('waiting');
+
+    } else if (data.status === 'done') {
+        // Graph zakończył się
+        currentThreadId = null;
+        if (data.output_file_path) {
+            currentOutputPath = data.output_file_path;
+            pathOut.textContent = currentOutputPath;
+            enableDownload();
+        }
+        appendMsg('bot', data.response || 'Done! ✓');
+        hideInterruptPanel();
+        unlockInput();
+        setAgentState('done');
+
+    } else {
+        // Fallback: stary format bez statusu
+        appendMsg('bot', data.response || JSON.stringify(data));
+        unlockInput();
+        setAgentState('idle');
+    }
+}
+
+// ─── Interrupt panel ─────────────────────────────
+function showInterruptPanel(question) {
+    interruptQuestion.textContent = question;
+    continueWrap.classList.remove('visible');
+    continueTextarea.value = '';
+    interruptPanel.classList.add('visible');
+    // Schowaj przyciski Yes/No jeśli był kliknięty No i teraz wracamy
+    document.querySelector('.interrupt-btns').style.display = 'flex';
+}
+
+function hideInterruptPanel() {
+    interruptPanel.classList.remove('visible');
+    continueWrap.classList.remove('visible');
+}
+
+btnYes.addEventListener('click', () => sendResume('yes'));
+
+btnNo.addEventListener('click', () => {
+    // Pokaż pole tekstowe do nowej instrukcji
+    document.querySelector('.interrupt-btns').style.display = 'none';
+    continueWrap.classList.add('visible');
+    continueTextarea.focus();
+});
+
+sendContinueBtn.addEventListener('click', () => {
+    const instruction = continueTextarea.value.trim();
+    if (!instruction) return;
+    sendResume('no', instruction);
+});
+
+continueTextarea.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+        const instruction = continueTextarea.value.trim();
+        if (instruction) sendResume('no', instruction);
+    }
+});
+
+async function sendResume(answer, newInstruction = '') {
+    hideInterruptPanel();
+    setAgentState('working');
+    if (newInstruction) appendMsg('user', newInstruction);
+    const loadingId = appendMsg('bot', '⏳ Continuing…', true);
+
+    try {
+        const res = await fetch(`${API_URL}/resume`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                thread_id:       currentThreadId,
+                answer:          answer,
+                new_instruction: newInstruction
+            })
+        });
+        if (!res.ok) throw new Error('Server error during resume');
+        const data = await res.json();
+        document.getElementById(loadingId)?.remove();
+        handleAgentResponse(data);
+
+    } catch (err) {
+        document.getElementById(loadingId)?.remove();
+        appendMsg('bot', `❌ Resume error: ${err.message}`);
+        unlockInput();
+        setAgentState('idle');
+    }
+}
+
+// ─── Helpers ─────────────────────────────────────
+function appendMsg(role, text, isLoading = false) {
+    const id = 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+    const isBot  = role === 'bot';
+    const avatar = isBot ? '🤖' : '👤';
+    const div = document.createElement('div');
+    div.id = id;
+    div.className = `msg ${isBot ? 'bot' : 'user'}`;
+    div.innerHTML = `
+        <div class="msg-avatar">${avatar}</div>
+        <div class="msg-body ${isLoading ? 'loading' : ''}">${escHtml(text)}</div>
+    `;
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+    return id;
+}
+
+function escHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function lockInput() {
+    chatInput.disabled = true;
+    sendBtn.disabled   = true;
+    sendBtn.classList.remove('active');
+}
+
+function unlockInput() {
+    if (!currentInputPath) return;  // nie odblokowuj jeśli nie ma pliku
+    chatInput.disabled = false;
+    sendBtn.disabled   = false;
+    sendBtn.classList.add('active');
+}
+
+function enableDownload() {
+    if (!currentOutputPath) return;
+    const fileName = currentOutputPath.split(/[\\/]/).pop();
+    downloadBtn.disabled = false;
+    downloadBtn.classList.add('active');
+    downloadBtn.onclick = () => { window.location.href = `${API_URL}/download/${fileName}`; };
+}
+</script>
+</body>
+</html>
